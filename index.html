@@ -973,8 +973,14 @@ clearEl.addEventListener('click', ()=>{ searchEl.value=''; doSearch(''); searchE
 const API = "https://script.google.com/macros/s/AKfycbw97rA1Km3xZg3Y6SkNkUqPWx6qeSO-EMPJGQKYEeikbMbXDZHcHzrxXGQV5PXfoFia/exec";
 const safeUrl = u => /^https?:\/\//i.test(u) ? esc(u).replace(/"/g,'%22') : '#';
 function toRes(it){
-  return { cat:CAT[it.cat]?it.cat:'ref', title:esc(it.title), oneline:esc(it.oneline),
+  const d = it.detail, list = a => (a||[]).map(esc);
+  const r = { cat:CAT[it.cat]?it.cat:'ref', title:esc(it.title), oneline:esc(it.oneline),
     notes: it.memo?[esc(it.memo)]:[], links:[{t:'원문 열기', u:safeUrl(it.url)}] };
+  if(d){ // AI가 정리한 상세 내용
+    r.what = esc(d.what); r.why = list(d.why); r.steps = list(d.steps);
+    r.notes = list(d.notes).concat(r.notes, ['AI가 원문을 읽고 자동으로 정리한 내용이라 틀린 부분이 있을 수 있어요. 정확한 내용은 원문을 확인하세요.']);
+  }
+  return r;
 }
 function addResource(it){
   resources.push(toRes(it));
@@ -996,7 +1002,7 @@ document.getElementById('addCancel').onclick = ()=>dlg.close();
 document.getElementById('addForm').onsubmit = async e=>{
   e.preventDefault();
   const go = document.getElementById('addGo'); go.disabled = true;
-  msg.className=''; msg.textContent='가져와서 정리하는 중…';
+  msg.className=''; msg.textContent='AI가 읽고 정리하는 중… (최대 1분)';
   const v = id=>document.getElementById(id).value;
   try{
     // text/plain으로 보내야 구글 서버가 사전 요청(CORS preflight)을 요구하지 않는다
@@ -1006,6 +1012,7 @@ document.getElementById('addForm').onsubmit = async e=>{
     if(!d.ok){ msg.className='err'; msg.textContent=d.error; return; }
     try{ localStorage.setItem('jaryoPin', v('fPin')); }catch(e){}
     addResource(d.item);
+    if(d.aiNote) alert(d.aiNote);
     ['fUrl','fTitle','fMemo'].forEach(id=>document.getElementById(id).value='');
     dlg.close(); go_last();
   }catch(err){ msg.className='err'; msg.textContent='저장하지 못했어요. 잠시 후 다시 시도해 주세요.'; }
