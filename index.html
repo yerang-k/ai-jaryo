@@ -173,6 +173,22 @@
   .chiprow button{border:1px solid var(--line); background:#f5f7fa; border-radius:999px; padding:6px 13px; font-size:.82rem; cursor:pointer; font-family:inherit; color:var(--ink-soft);}
   .chiprow button:hover{border-color:var(--accent); color:var(--accent);}
 
+
+  .addbtn{border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:999px; padding:7px 14px; font-size:.84rem; font-weight:700; cursor:pointer; font-family:inherit;}
+  .addbtn:hover{background:var(--accent-deep);}
+  dialog.addbox{margin:auto; max-height:92vh; overflow:auto; border:none; border-radius:16px; padding:22px 22px 18px; width:min(440px,92vw); box-shadow:0 12px 40px rgba(0,0,0,.25); font-family:inherit; color:var(--ink);}
+  dialog.addbox::backdrop{background:rgba(0,0,0,.4);}
+  dialog.addbox h3{margin:0 0 4px; font-size:1.1rem;}
+  dialog.addbox p.hint{margin:0 0 14px; color:var(--ink-soft); font-size:.84rem; line-height:1.5;}
+  dialog.addbox label{display:block; font-size:.8rem; font-weight:700; margin:10px 0 4px;}
+  dialog.addbox input, dialog.addbox select, dialog.addbox textarea{width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:10px; padding:9px 11px; font-size:.92rem; font-family:inherit;}
+  dialog.addbox .btns{display:flex; gap:8px; justify-content:flex-end; margin-top:16px;}
+  dialog.addbox .btns button{border:1px solid var(--line); background:#fff; border-radius:10px; padding:9px 16px; font-weight:700; cursor:pointer; font-family:inherit;}
+  dialog.addbox .btns button.go{background:var(--accent); color:#fff; border-color:var(--accent);}
+  dialog.addbox .btns button:disabled{opacity:.6; cursor:wait;}
+  #addMsg{min-height:1.2em; margin-top:10px; font-size:.85rem; color:var(--ink-soft);}
+  #addMsg.err{color:#b3261e;}
+
   @media (max-width:560px){
     .card{padding:24px 20px 28px;}
     h1.title{font-size:1.42rem;}
@@ -189,7 +205,7 @@
         <small>모아둔 자료를 실무에 바로 쓰도록 세팅법까지 정리 · 넘겨서 보기</small>
       </span>
     </div>
-    <div class="counter" id="counter">– / –</div>
+    <div style="display:flex; align-items:center; gap:10px;"><button class="addbtn" id="addBtn">＋ 자료 추가</button><div class="counter" id="counter">– / –</div></div>
   </header>
 
   <div class="searchbar">
@@ -203,6 +219,22 @@
   <section class="results" id="results" hidden></section>
 </div>
 
+
+<dialog class="addbox" id="addDlg">
+  <form method="dialog" id="addForm">
+    <h3>자료 추가</h3>
+    <p class="hint">링크를 넣으면 제목·요약을 자동으로 가져와 분류하고, 모두에게 바로 보여요.</p>
+    <label>링크 *</label><input id="fUrl" type="url" placeholder="https://..." required>
+    <label>제목 (비우면 자동)</label><input id="fTitle" type="text">
+    <label>분류</label>
+    <select id="fCat"><option value="">자동으로 정리</option><option value="must">교사 필수</option><option value="ref">실무 참고</option><option value="dev">개발·심화</option></select>
+    <label>메모 (선택)</label><textarea id="fMemo" rows="2"></textarea>
+    <label>PIN *</label><input id="fPin" type="password" inputmode="numeric" autocomplete="off" required>
+    <div id="addMsg"></div>
+    <div class="btns"><button type="button" id="addCancel">닫기</button><button type="submit" class="go" id="addGo">추가하기</button></div>
+  </form>
+</dialog>
+
 <nav class="bottom">
   <div class="inner">
     <button id="prev">← 이전</button>
@@ -214,7 +246,8 @@
 <script>
 /* =========================================================================
    자료 추가 방법 (나중에 새 자료가 생기면):
-   아래 resources 배열 맨 끝에 { ... } 하나를 복사해 붙이고 내용만 바꾸면 됩니다.
+   (간단한 링크는 페이지 위 '＋ 자료 추가' 버튼으로 넣으면 구글 시트에 저장됩니다.)
+   세팅법까지 자세히 정리할 자료는 아래 resources 배열 맨 끝에 { ... } 하나를 복사해 붙이고 내용만 바꾸면 됩니다.
    - cat: "must"(교사 필수) / "ref"(실무 참고) / "dev"(개발·심화)
    - steps, why, notes, prompts 는 없으면 빈 배열 [] 또는 생략 가능
    ========================================================================= */
@@ -623,7 +656,7 @@ const CAT = {
   ref:{label:"실무 참고", cls:"ref", color:"var(--c-ref)"},
   dev:{label:"개발·심화", cls:"dev", color:"var(--c-dev)"}
 };
-const total = resources.length + 1; // +1 intro
+let total = resources.length + 1; // +1 intro
 let idx = 0;
 
 const card = document.getElementById('card');
@@ -741,7 +774,7 @@ function stripTags(s){ return String(s||'').replace(/<[^>]*>/g,' ').replace(/&lt
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // build a plain-text blob per resource for searching
-const index = resources.map((r,i)=>{
+function buildIndex(){ return resources.map((r,i)=>{
   let parts = [r.title, r.oneline, r.what, CAT[r.cat].label];
   (r.why||[]).forEach(x=>parts.push(x));
   (r.steps||[]).forEach(x=>parts.push(x));
@@ -751,7 +784,8 @@ const index = resources.map((r,i)=>{
   (r.links||[]).forEach(l=>parts.push(l.t));
   const plain = stripTags(parts.join('  •  '));
   return { i, r, plain, lower: plain.toLowerCase() };
-});
+}); }
+let index = buildIndex();
 
 function snippet(plain, tokens){
   const lower = plain.toLowerCase();
@@ -815,6 +849,50 @@ function doSearch(q){
 
 searchEl.addEventListener('input', e=>doSearch(e.target.value));
 clearEl.addEventListener('click', ()=>{ searchEl.value=''; doSearch(''); searchEl.focus(); });
+
+/* ---------- 자료 추가 (구글 시트 연동) ---------- */
+const API = "https://script.google.com/macros/s/AKfycbw97rA1Km3xZg3Y6SkNkUqPWx6qeSO-EMPJGQKYEeikbMbXDZHcHzrxXGQV5PXfoFia/exec";
+const safeUrl = u => /^https?:\/\//i.test(u) ? esc(u).replace(/"/g,'%22') : '#';
+function toRes(it){
+  return { cat:CAT[it.cat]?it.cat:'ref', title:esc(it.title), oneline:esc(it.oneline),
+    notes: it.memo?[esc(it.memo)]:[], links:[{t:'원문 열기', u:safeUrl(it.url)}] };
+}
+function addResource(it){
+  resources.push(toRes(it));
+  total = resources.length + 1; index = buildIndex(); buildStrip();
+}
+fetch(API).then(r=>r.json()).then(d=>{
+  if(!d.ok) return;
+  d.items.forEach(addResource);
+  render();
+}).catch(()=>{}); // 시트를 못 읽어도 기본 자료는 그대로 보임
+
+const dlg = document.getElementById('addDlg'), msg = document.getElementById('addMsg');
+document.getElementById('addBtn').onclick = ()=>{
+  msg.textContent=''; msg.className='';
+  try{ document.getElementById('fPin').value = localStorage.getItem('jaryoPin')||''; }catch(e){}
+  dlg.showModal();
+};
+document.getElementById('addCancel').onclick = ()=>dlg.close();
+document.getElementById('addForm').onsubmit = async e=>{
+  e.preventDefault();
+  const go = document.getElementById('addGo'); go.disabled = true;
+  msg.className=''; msg.textContent='가져와서 정리하는 중…';
+  const v = id=>document.getElementById(id).value;
+  try{
+    // text/plain으로 보내야 구글 서버가 사전 요청(CORS preflight)을 요구하지 않는다
+    const res = await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({url:v('fUrl'),title:v('fTitle'),cat:v('fCat'),memo:v('fMemo'),pin:v('fPin')})});
+    const d = await res.json();
+    if(!d.ok){ msg.className='err'; msg.textContent=d.error; return; }
+    try{ localStorage.setItem('jaryoPin', v('fPin')); }catch(e){}
+    addResource(d.item);
+    ['fUrl','fTitle','fMemo'].forEach(id=>document.getElementById(id).value='');
+    dlg.close(); go_last();
+  }catch(err){ msg.className='err'; msg.textContent='저장하지 못했어요. 잠시 후 다시 시도해 주세요.'; }
+  finally{ go.disabled=false; }
+};
+function go_last(){ searchEl.value=''; doSearch(''); go(total-1); }
 
 document.getElementById('avaHeader').innerHTML = AVA_IMG;
 buildStrip();
