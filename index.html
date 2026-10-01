@@ -201,6 +201,7 @@
   .ask .chiprow button{background:#fff;}
   .why-match{margin-top:8px; font-size:.8rem; color:var(--accent-deep);}
   .why-match b{font-weight:700;}
+  .ainote{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px;}
   .backlist{font-family:inherit; font-size:.88rem; font-weight:700; border:1px solid var(--line); background:#fff; border-radius:10px; padding:9px 14px; cursor:pointer; margin-bottom:12px; min-height:40px;}
   /* 상세 상단 */
   .dtop{display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-bottom:16px;}
@@ -1026,11 +1027,36 @@ function fieldsOf(r){
     [1, j(r.why)+' '+j(r.steps)+' '+j(r.notes)+' '+j((r.extra||[]).flatMap(x=>x.items||[]))+' '+stripTags((r.prompts||[]).map(p=>p.label+' '+p.body).join(' ')).toLowerCase()]
   ];
 }
-function recommend(q){
-  q = q.trim();
-  if(!q) return;
+let askSeq = 0;
+function showPicks(q, picks, note){
+  card.hidden = true; resultsEl.hidden = false; navEl.style.display = 'none';
+  const back = `<button class="backlist" id="askBack">← 목록으로</button>`;
+  const noteHTML = note ? `<div class="rhead ainote">${note}</div>` : '';
+  if(!picks.length){
+    resultsEl.innerHTML = back + noteHTML + `<div class="noresult"><div class="big">🧭</div>
+      "<b>${esc(q)}</b>"에 딱 맞는 자료를 찾지 못했어요.<br>다른 표현으로 다시 설명해 보세요. 예: 학부모, 생기부, PPT, 문제, 평가
+      <div class="chiprow">${['프롬프트','PPT','생기부','수업','평가','무료'].map(k=>`<button data-k="${k}">${k}</button>`).join('')}</div></div>`;
+  } else {
+    resultsEl.innerHTML = back + noteHTML + `<div class="rhead">"<b>${esc(q)}</b>"에 도움이 될 자료 <b>${picks.length}개</b>를 골랐어요. 위에 있을수록 더 잘 맞아요.</div>` +
+      picks.map(x=>{
+        const c = CAT[x.r.cat];
+        const why = x.reason ? `<div class="why-match">💬 <b>${esc(x.reason)}</b></div>`
+                  : `<div class="why-match">🔎 일치한 낱말: <b>${x.hit.slice(0,5).map(esc).join(', ')}</b></div>`;
+        return `<button class="result-item" data-go="${x.i+1}">
+          <div class="rtop"><span class="mini ${c.cls}">${c.label}</span><span class="rno">${x.i+1}번</span></div>
+          <span class="rtitle">${x.r.title}</span>
+          <div class="rone">${x.r.oneline}</div>${why}
+        </button>`;
+      }).join('');
+  }
+  resultsEl.querySelector('#askBack').onclick = ()=>{ askSeq++; searchEl.value=''; go(0); };
+  resultsEl.querySelectorAll('[data-go]').forEach(b=>{ b.onclick=()=>{ askSeq++; searchEl.value=''; go(parseInt(b.dataset.go)); }; });
+  resultsEl.querySelectorAll('[data-k]').forEach(b=>{ b.onclick=()=>{ askSeq++; searchEl.value=b.dataset.k; doSearch(b.dataset.k); }; });
+}
+
+function localPicks(q){
   const { terms, syn } = parseAsk(q);
-  const scored = resources.map((r,i)=>{
+  return resources.map((r,i)=>{
     const f = fieldsOf(r); let score = 0; const hit = [];
     [[terms,1],[syn,.6]].forEach(([list,w])=>list.forEach(t=>{
       let best = 0;
@@ -1039,28 +1065,39 @@ function recommend(q){
     }));
     return { i, r, score, hit };
   }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,5);
-  card.hidden = true; resultsEl.hidden = false; navEl.style.display = 'none';
+}
+
+// AI에게 목록을 주고 설명에 맞는 자료를 고르게 한다 (구글 Apps Script의 action:'recommend')
+async function aiPicks(q, pin){
+  const catalog = resources.map((r,i)=>({n:i+1, title:stripTags(r.title), cat:r.cat, oneline:stripTags(r.oneline), what:stripTags(r.what).slice(0,160)}));
+  const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), 45000);
+  try{
+    const res = await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain'},signal:ctl.signal,
+      body:JSON.stringify({action:'recommend', query:q, pin, catalog})});
+    const d = await res.json();
+    if(!d.ok || !Array.isArray(d.picks)) return null;
+    return d.picks.filter(x=>resources[x.n-1]).slice(0,5).map(x=>({i:x.n-1, r:resources[x.n-1], reason:String(x.reason||'')}));
+  }catch(e){ return null; }
+  finally{ clearTimeout(to); }
+}
+
+async function recommend(q){
+  q = q.trim();
+  if(!q) return;
+  const my = ++askSeq;
   window.scrollTo({top:0});
-  const back = `<button class="backlist" id="askBack">← 목록으로</button>`;
-  if(!scored.length){
-    resultsEl.innerHTML = back + `<div class="noresult"><div class="big">🧭</div>
-      "<b>${esc(q)}</b>"에 딱 맞는 자료를 찾지 못했어요.<br>다른 표현으로 다시 설명해 보세요. 예: 학부모, 생기부, PPT, 문제, 평가
-      <div class="chiprow">${['프롬프트','PPT','생기부','수업','평가','무료'].map(k=>`<button data-k="${k}">${k}</button>`).join('')}</div></div>`;
-  } else {
-    resultsEl.innerHTML = back + `<div class="rhead">"<b>${esc(q)}</b>"에 도움이 될 자료 <b>${scored.length}개</b>를 골랐어요. 위에 있을수록 더 잘 맞아요.</div>` +
-      scored.map(x=>{
-        const c = CAT[x.r.cat];
-        return `<button class="result-item" data-go="${x.i+1}">
-          <div class="rtop"><span class="mini ${c.cls}">${c.label}</span><span class="rno">${x.i+1}번</span></div>
-          <span class="rtitle">${x.r.title}</span>
-          <div class="rone">${x.r.oneline}</div>
-          <div class="why-match">🔎 일치한 낱말: <b>${x.hit.slice(0,5).map(esc).join(', ')}</b></div>
-        </button>`;
-      }).join('');
+  const pin = (()=>{ try{ return localStorage.getItem('jaryoPin')||''; }catch(e){ return ''; } })();
+  const local = localPicks(q);
+  if(!pin){
+    showPicks(q, local, '💡 AI 추천을 쓰려면 "＋ 자료 추가"에서 PIN을 한 번 입력해 두세요. 지금은 낱말 기준으로 찾았어요.');
+    return;
   }
-  resultsEl.querySelector('#askBack').onclick = ()=>{ searchEl.value=''; go(0); };
-  resultsEl.querySelectorAll('[data-go]').forEach(b=>{ b.onclick=()=>{ searchEl.value=''; go(parseInt(b.dataset.go)); }; });
-  resultsEl.querySelectorAll('[data-k]').forEach(b=>{ b.onclick=()=>{ searchEl.value=b.dataset.k; doSearch(b.dataset.k); }; });
+  showPicks(q, local, '🤖 AI가 더 잘 맞는 자료를 고르는 중이에요… (먼저 낱말 기준 결과를 보여드려요)');
+  const ai = await aiPicks(q, pin);
+  if(my !== askSeq) return; // 그새 다른 화면으로 이동했으면 무시
+  if(ai && ai.length) showPicks(q, ai, '🤖 AI가 설명을 읽고 골랐어요. 이유도 함께 적었어요.');
+  else if(ai) showPicks(q, local, '🤖 AI도 딱 맞는 자료를 찾지 못했어요.');
+  else showPicks(q, local, '⚠️ AI 추천을 불러오지 못해 낱말 기준 결과를 보여드려요.');
 }
 
 /* ---------- 자료 추가 (구글 시트 연동) ---------- */
