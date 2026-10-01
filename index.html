@@ -190,6 +190,18 @@
   .mini.new{color:#fff; background:var(--accent);}
   .list .result-item .rtitle{display:block; margin-bottom:3px;}
   .listwrap{animation:fade .2s ease;}
+  /* 말로 찾기 */
+  .ask{background:var(--accent-soft); border:1px solid var(--line); border-radius:16px; padding:16px 16px 14px; margin-bottom:16px;}
+  .ask label{display:block; font-weight:800; font-size:.95rem; margin-bottom:8px;}
+  .askrow{display:flex; gap:8px;}
+  .askrow input{flex:1; min-width:0; font-family:inherit; font-size:1rem; border:1px solid var(--line); border-radius:12px; padding:12px 14px; outline:none; background:#fff;}
+  .askrow input:focus{border-color:var(--accent);}
+  .askrow button{white-space:nowrap; padding:0 18px; font-size:.92rem;}
+  .ask .chiprow{justify-content:flex-start;}
+  .ask .chiprow button{background:#fff;}
+  .why-match{margin-top:8px; font-size:.8rem; color:var(--accent-deep);}
+  .why-match b{font-weight:700;}
+  .backlist{font-family:inherit; font-size:.88rem; font-weight:700; border:1px solid var(--line); background:#fff; border-radius:10px; padding:9px 14px; cursor:pointer; margin-bottom:12px; min-height:40px;}
   /* 상세 상단 */
   .dtop{display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-bottom:16px;}
   .dtop button, .dtop a{font-family:inherit; font-size:.88rem; font-weight:700; text-decoration:none; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:9px 14px; cursor:pointer; min-height:40px; display:inline-flex; align-items:center;}
@@ -793,6 +805,7 @@ const AVA_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAUE
 const AVA_IMG = `<img src="${AVA_SRC}" alt="선생님 캐릭터">`;
 
 let filter = 'all';
+let askText = '';
 function homeHTML(){
   const n = c => resources.filter(r=>r.cat===c).length;
   const tabs = [['all','전체',resources.length],['must','교사 필수',n('must')],['ref','실무 참고',n('ref')],['dev','개발·심화',n('dev')]];
@@ -800,6 +813,11 @@ function homeHTML(){
   rows.sort((a,b)=>(b.r.added?1:0)-(a.r.added?1:0)); // 새로 추가한 자료를 앞에 (나머지는 원래 순서 유지)
   return `
     <div class="home-hi"><b>반가워요, 선생님 👋</b><span>필요한 자료를 눌러 바로 열어 보세요. 새로 추가한 자료는 맨 위에 나와요.</span></div>
+    <form class="ask" id="askForm">
+      <label for="askQ">🧭 어떤 자료가 필요하세요? 말로 설명해 주세요</label>
+      <div class="askrow"><input id="askQ" type="text" value="${esc(askText)}" placeholder="예: 학부모 안내문을 빨리 만들고 싶어요" autocomplete="off"><button class="addbtn" type="submit">찾아줘</button></div>
+      <div class="chiprow">${['학부모 안내문 만들기','생기부 세특 쓰는 걸 도와줘요','PPT를 예쁘게 만들고 싶어요','시험 문제 만들기'].map(k=>`<button type="button" data-ex="${k}">${k}</button>`).join('')}</div>
+    </form>
     <div class="tabs">${tabs.map(t=>`<button data-f="${t[0]}" class="${filter===t[0]?'on':''}">${t[1]}<small>${t[2]}</small></button>`).join('')}</div>
     <div class="listwrap list">${rows.map(({r,i})=>{
       const c = CAT[r.cat];
@@ -842,6 +860,11 @@ function render(keepScroll){
   navEl.style.display = idx===0 ? 'none' : '';
   card.querySelectorAll('[data-f]').forEach(b=>{ b.onclick=()=>{ filter=b.dataset.f; render(true); }; });
   card.querySelectorAll('[data-go]').forEach(b=>{ b.onclick=()=>go(parseInt(b.dataset.go)); });
+  const af = card.querySelector('#askForm');
+  if(af){
+    af.onsubmit = e=>{ e.preventDefault(); askText = card.querySelector('#askQ').value; recommend(askText); };
+    card.querySelectorAll('[data-ex]').forEach(b=>{ b.onclick=()=>{ askText=b.dataset.ex; recommend(askText); }; });
+  }
   card.querySelectorAll('[data-home]').forEach(b=>{ b.onclick=()=>go(0); });
   if(!keepScroll) window.scrollTo({top:0, behavior:'smooth'});
 }
@@ -849,6 +872,7 @@ function render(keepScroll){
 function hashIdx(){ const m=/^#r(\d+)$/.exec(location.hash); return m? parseInt(m[1]):0; }
 function clampIdx(i){ return Math.max(0, Math.min(total-1, i)); }
 function go(i){
+  resultsEl.hidden = true; card.hidden = false;
   idx = clampIdx(i);
   if(hashIdx()!==idx){
     try{ history.pushState(null,'', idx? '#r'+idx : location.pathname+location.search); }
@@ -856,7 +880,7 @@ function go(i){
   }
   render();
 }
-window.addEventListener('popstate',()=>{ idx = clampIdx(hashIdx()); render(); });
+window.addEventListener('popstate',()=>{ resultsEl.hidden = true; card.hidden = false; idx = clampIdx(hashIdx()); render(); });
 
 prevBtn.onclick=()=>go(idx-1);
 nextBtn.onclick=()=>go(idx+1);
@@ -951,6 +975,93 @@ function doSearch(q){
 
 searchEl.addEventListener('input', e=>doSearch(e.target.value));
 clearEl.addEventListener('click', ()=>{ searchEl.value=''; doSearch(''); searchEl.focus(); });
+
+/* ---------- 말로 찾기 (설명에 맞는 자료 추천) ---------- */
+const JOSA = ['으로','에서','에게','까지','부터','이랑','처럼','보다','한테','하고','라고','를','을','은','는','이','가','에','로','와','과','도','의','만','랑'];
+const STOP = ['만들','싶','해줘','해주','하는','하고','할때','필요','어떻게','알려','자료','있','좋','추천','도움','방법','빨리','쉽게','어떤','뭐','무엇','관련','대한','위한','때','걸','수','것','저','제','좀','도와'];
+// 같은 뜻으로 묶이는 낱말 (설명이 자료의 표현과 달라도 찾도록)
+const SYN = [
+  ['생기부','세특','생활기록','교과세특','학생부','행발','특기사항','관찰'],
+  ['ppt','피피티','슬라이드','발표','프레젠테이션','파워포인트','pptx'],
+  ['학부모','안내문','가정통신','알림장','공지','통신문'],
+  ['지도안','수업','교안','차시','학습목표','성취기준'],
+  ['평가','채점','평가계획','수행평가','루브릭','서술형'],
+  ['문제','퀴즈','시험','문제집','출제','시험범위','기출'],
+  ['학습지','워크시트','활동지','a4','인쇄'],
+  ['노션','notion'],
+  ['엑셀','xlsx','성적','paps','체력','스프레드시트','표'],
+  ['글쓰기','글','문서','보고서','공문','문장','작문','요약'],
+  ['디자인','카드뉴스','색','색조합','글씨체','폰트','예쁘','이미지','갤러리'],
+  ['캡처','스크린샷','화면'],
+  ['코딩','개발','터미널','클로드코드','claude code','프로그래밍','코드'],
+  ['예약','자동','반복','스케줄','자동화'],
+  ['무료','공짜','무료플랜'],
+  ['스킬','skill','프롬프트','치트키'],
+  ['notebooklm','노트북lm','노트북엘엠','가이드북']
+];
+function parseAsk(q){
+  const raw = q.toLowerCase().replace(/[^0-9a-z가-힣\s]/g,' ').split(/\s+/).filter(Boolean);
+  const terms = [];
+  raw.forEach(w=>{
+    let t = w;
+    for(const j of JOSA){ if(t.length>j.length+1 && t.endsWith(j)){ t = t.slice(0,-j.length); break; } }
+    if(t.length<2 && !/^[a-z0-9]$/.test(t)) return;
+    if(STOP.some(st=>t.startsWith(st))) return;
+    if(!terms.includes(t)) terms.push(t);
+  });
+  const syn = [];
+  terms.forEach(t=>SYN.forEach(g=>{
+    if(g.some(m=>t===m || (m.length>=2 && t.includes(m)) || (t.length>=2 && m.includes(t)))){
+      g.forEach(m=>{ if(!terms.includes(m) && !syn.includes(m)) syn.push(m); });
+    }
+  }));
+  return { terms, syn };
+}
+function fieldsOf(r){
+  const j = a=>stripTags((a||[]).join(' ')).toLowerCase();
+  return [
+    [5, stripTags(r.title).toLowerCase()],
+    [3, stripTags(r.oneline).toLowerCase()],
+    [2, stripTags(r.what).toLowerCase()],
+    [1, j(r.why)+' '+j(r.steps)+' '+j(r.notes)+' '+j((r.extra||[]).flatMap(x=>x.items||[]))+' '+stripTags((r.prompts||[]).map(p=>p.label+' '+p.body).join(' ')).toLowerCase()]
+  ];
+}
+function recommend(q){
+  q = q.trim();
+  if(!q) return;
+  const { terms, syn } = parseAsk(q);
+  const scored = resources.map((r,i)=>{
+    const f = fieldsOf(r); let score = 0; const hit = [];
+    [[terms,1],[syn,.6]].forEach(([list,w])=>list.forEach(t=>{
+      let best = 0;
+      f.forEach(([fw,txt])=>{ if(txt.includes(t)) best = Math.max(best, fw); });
+      if(best){ score += best*w; if(!hit.includes(t)) hit.push(t); }
+    }));
+    return { i, r, score, hit };
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,5);
+  card.hidden = true; resultsEl.hidden = false; navEl.style.display = 'none';
+  window.scrollTo({top:0});
+  const back = `<button class="backlist" id="askBack">← 목록으로</button>`;
+  if(!scored.length){
+    resultsEl.innerHTML = back + `<div class="noresult"><div class="big">🧭</div>
+      "<b>${esc(q)}</b>"에 딱 맞는 자료를 찾지 못했어요.<br>다른 표현으로 다시 설명해 보세요. 예: 학부모, 생기부, PPT, 문제, 평가
+      <div class="chiprow">${['프롬프트','PPT','생기부','수업','평가','무료'].map(k=>`<button data-k="${k}">${k}</button>`).join('')}</div></div>`;
+  } else {
+    resultsEl.innerHTML = back + `<div class="rhead">"<b>${esc(q)}</b>"에 도움이 될 자료 <b>${scored.length}개</b>를 골랐어요. 위에 있을수록 더 잘 맞아요.</div>` +
+      scored.map(x=>{
+        const c = CAT[x.r.cat];
+        return `<button class="result-item" data-go="${x.i+1}">
+          <div class="rtop"><span class="mini ${c.cls}">${c.label}</span><span class="rno">${x.i+1}번</span></div>
+          <span class="rtitle">${x.r.title}</span>
+          <div class="rone">${x.r.oneline}</div>
+          <div class="why-match">🔎 일치한 낱말: <b>${x.hit.slice(0,5).map(esc).join(', ')}</b></div>
+        </button>`;
+      }).join('');
+  }
+  resultsEl.querySelector('#askBack').onclick = ()=>{ searchEl.value=''; go(0); };
+  resultsEl.querySelectorAll('[data-go]').forEach(b=>{ b.onclick=()=>{ searchEl.value=''; go(parseInt(b.dataset.go)); }; });
+  resultsEl.querySelectorAll('[data-k]').forEach(b=>{ b.onclick=()=>{ searchEl.value=b.dataset.k; doSearch(b.dataset.k); }; });
+}
 
 /* ---------- 자료 추가 (구글 시트 연동) ---------- */
 const API = "https://script.google.com/macros/s/AKfycbw97rA1Km3xZg3Y6SkNkUqPWx6qeSO-EMPJGQKYEeikbMbXDZHcHzrxXGQV5PXfoFia/exec";
