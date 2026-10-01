@@ -120,22 +120,6 @@
   nav.bottom button:disabled{opacity:.38; cursor:default;}
   nav.bottom .mid{font-size:.82rem; color:var(--ink-soft); text-align:center;}
 
-  /* search */
-  .searchbar{position:relative; margin-bottom:16px;}
-  .searchbar input{
-    width:100%; font-family:inherit; font-size:1rem; color:var(--ink);
-    background:var(--card); border:1px solid var(--line); border-radius:14px;
-    padding:14px 46px 14px 16px; box-shadow:var(--shadow); outline:none; transition:.15s;
-  }
-  .searchbar input:focus{border-color:var(--accent);}
-  .searchbar input::placeholder{color:#a6a6a6;}
-  .searchbar .clr{
-    position:absolute; right:8px; top:50%; transform:translateY(-50%);
-    border:none; background:#eef1f5; color:var(--ink-soft); border-radius:9px;
-    padding:7px 12px; font-size:.82rem; font-weight:700; cursor:pointer; font-family:inherit;
-  }
-  .searchbar .clr:hover{background:var(--accent-soft); color:var(--accent);}
-
   .results{animation:fade .2s ease;}
   .results .rhead{color:var(--ink-soft); font-size:.9rem; margin-bottom:12px; padding:0 2px;}
   .results .rhead b{color:var(--accent);}
@@ -227,11 +211,6 @@
     </div>
     <div style="display:flex; align-items:center; gap:10px;"><button class="addbtn" id="addBtn">＋ 자료 추가</button><div class="counter" id="counter">– / –</div></div>
   </header>
-
-  <div class="searchbar">
-    <input id="search" type="search" placeholder="🔍 검색 — 예: 프롬프트, PPT, 생기부, 노션, 무료" autocomplete="off" spellcheck="false">
-    <button id="clearSearch" class="clr" hidden>지우기 ✕</button>
-  </div>
 
   <main class="card" id="card"><!-- rendered --></main>
   <section class="results" id="results" hidden></section>
@@ -886,96 +865,18 @@ window.addEventListener('popstate',()=>{ resultsEl.hidden = true; card.hidden = 
 prevBtn.onclick=()=>go(idx-1);
 nextBtn.onclick=()=>go(idx+1);
 document.addEventListener('keydown',e=>{
-  // ignore while searching or typing in the search box
-  if(!document.getElementById('results').hidden) return;
-  if(document.activeElement && document.activeElement.id==='search') return;
+  // 추천 결과를 보는 중이거나 입력칸에 글을 쓰는 중에는 방향키로 넘기지 않는다
+  if(!resultsEl.hidden) return;
+  if(document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
   if(idx===0) return;
   if(e.key==='ArrowRight') go(idx+1);
   if(e.key==='ArrowLeft') go(idx-1);
 });
 
-/* ---------- search ---------- */
-const searchEl = document.getElementById('search');
-const clearEl = document.getElementById('clearSearch');
+/* ---------- 공용 ---------- */
 const resultsEl = document.getElementById('results');
-
 function stripTags(s){ return String(s||'').replace(/<[^>]*>/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/\s+/g,' ').trim(); }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-// build a plain-text blob per resource for searching
-function buildIndex(){ return resources.map((r,i)=>{
-  let parts = [r.title, r.oneline, r.what, CAT[r.cat].label];
-  (r.why||[]).forEach(x=>parts.push(x));
-  (r.steps||[]).forEach(x=>parts.push(x));
-  (r.notes||[]).forEach(x=>parts.push(x));
-  (r.extra||[]).forEach(sec=>{ parts.push(sec.h); (sec.items||[]).forEach(x=>parts.push(x)); });
-  (r.prompts||[]).forEach(p=>{ parts.push(p.label); parts.push(p.body); });
-  (r.links||[]).forEach(l=>parts.push(l.t));
-  const plain = stripTags(parts.join('  •  '));
-  return { i, r, plain, lower: plain.toLowerCase() };
-}); }
-let index = buildIndex();
-
-function snippet(plain, tokens){
-  const lower = plain.toLowerCase();
-  let pos = -1;
-  for(const t of tokens){ const p = lower.indexOf(t); if(p>=0){ pos = p; break; } }
-  if(pos<0) return '';
-  const start = Math.max(0, pos-30);
-  let frag = plain.slice(start, pos+90);
-  if(start>0) frag = '…'+frag;
-  if(pos+90 < plain.length) frag = frag+'…';
-  frag = esc(frag);
-  tokens.forEach(t=>{
-    if(!t) return;
-    const re = new RegExp('('+t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig');
-    frag = frag.replace(re,'<mark>$1</mark>');
-  });
-  return frag;
-}
-
-function doSearch(q){
-  const query = q.trim();
-  clearEl.hidden = query.length===0;
-  if(query.length) navEl.style.display = 'none';
-  if(query.length===0){ // restore deck
-    resultsEl.hidden = true;
-    card.hidden = false;
-    render();
-    return;
-  }
-  const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const hits = index.filter(x => tokens.every(t => x.lower.includes(t)));
-  // show results view
-  card.hidden = true;
-  resultsEl.hidden = false;
-  if(hits.length===0){
-    resultsEl.innerHTML = `<div class="noresult"><div class="big">🔍</div>
-      "<b>${esc(query)}</b>"에 대한 자료를 찾지 못했어요.<br>다른 낱말로 검색해 보세요.
-      <div class="chiprow">${['프롬프트','PPT','생기부','노션','수업','평가','무료','스킬'].map(k=>`<button data-k="${k}">${k}</button>`).join('')}</div></div>`;
-  } else {
-    resultsEl.innerHTML = `<div class="rhead"><b>${hits.length}개</b> 자료를 찾았어요. 눌러서 바로 열어보세요.</div>` +
-      hits.map(x=>{
-        const c = CAT[x.r.cat];
-        const sn = snippet(x.plain, tokens);
-        return `<button class="result-item" data-go="${x.i+1}">
-          <div class="rtop"><span class="mini ${c.cls}">${c.label}</span><span class="rno">${x.i+1}번</span><span class="rtitle">${esc(x.r.title)}</span></div>
-          <div class="rone">${esc(x.r.oneline)}</div>
-          ${sn?`<div class="rsnip">${sn}</div>`:''}
-        </button>`;
-      }).join('');
-  }
-  // wire clicks
-  resultsEl.querySelectorAll('[data-go]').forEach(b=>{
-    b.onclick=()=>{ searchEl.value=''; doSearch(''); go(parseInt(b.dataset.go)); };
-  });
-  resultsEl.querySelectorAll('[data-k]').forEach(b=>{
-    b.onclick=()=>{ searchEl.value=b.dataset.k; doSearch(b.dataset.k); };
-  });
-}
-
-searchEl.addEventListener('input', e=>doSearch(e.target.value));
-clearEl.addEventListener('click', ()=>{ searchEl.value=''; doSearch(''); searchEl.focus(); });
 
 /* ---------- 말로 찾기 (설명에 맞는 자료 추천) ---------- */
 const JOSA = ['으로','에서','에게','까지','부터','이랑','처럼','보다','한테','하고','라고','를','을','은','는','이','가','에','로','와','과','도','의','만','랑'];
@@ -1049,9 +950,9 @@ function showPicks(q, picks, note){
         </button>`;
       }).join('');
   }
-  resultsEl.querySelector('#askBack').onclick = ()=>{ askSeq++; searchEl.value=''; go(0); };
-  resultsEl.querySelectorAll('[data-go]').forEach(b=>{ b.onclick=()=>{ askSeq++; searchEl.value=''; go(parseInt(b.dataset.go)); }; });
-  resultsEl.querySelectorAll('[data-k]').forEach(b=>{ b.onclick=()=>{ askSeq++; searchEl.value=b.dataset.k; doSearch(b.dataset.k); }; });
+  resultsEl.querySelector('#askBack').onclick = ()=>{ askSeq++; go(0); };
+  resultsEl.querySelectorAll('[data-go]').forEach(b=>{ b.onclick=()=>{ askSeq++; go(parseInt(b.dataset.go)); }; });
+  resultsEl.querySelectorAll('[data-k]').forEach(b=>{ b.onclick=()=>{ askText=b.dataset.k; recommend(askText); }; });
 }
 
 function localPicks(q){
@@ -1116,7 +1017,7 @@ function toRes(it){
 function addResource(it){
   const r = toRes(it); r.added = true;
   resources.push(r);
-  total = resources.length + 1; index = buildIndex();
+  total = resources.length + 1;
 }
 fetch(API).then(r=>r.json()).then(d=>{
   if(!d.ok) return;
@@ -1151,7 +1052,7 @@ document.getElementById('addForm').onsubmit = async e=>{
   }catch(err){ msg.className='err'; msg.textContent='저장하지 못했어요. 잠시 후 다시 시도해 주세요.'; }
   finally{ go.disabled=false; }
 };
-function go_last(){ searchEl.value=''; filter='all'; doSearch(''); go(0); }
+function go_last(){ filter='all'; go(0); }
 
 document.getElementById('avaHeader').innerHTML = AVA_IMG;
 render(true);
