@@ -1,0 +1,41 @@
+{
+  "id": "/ai-jaryo/?v=2",
+  "name": "나만의 북마크·캡처 허브",
+  "short_name": "내 자료허브",
+  "description": "캡처·링크·메모를 올리면 AI가 읽고 AI·교육·개인 영역별로 자동 정리하는 북마크 허브",
+  "start_url": "/ai-jaryo/",
+  "scope": "/ai-jaryo/",
+  "display": "standalone",
+  "background_color": "#f2f4f8",
+  "theme_color": "#20406b",
+  "icons": [
+    {
+      "src": "/ai-jaryo/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/ai-jaryo/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "share_target": {
+    "action": "/ai-jaryo/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "images",
+          "accept": ["image/*"]
+        }
+      ]
+    }
+  }
+}
