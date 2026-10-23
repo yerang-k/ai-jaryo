@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="내 자료 허브">
+<link rel="manifest" href="manifest.json?v=4">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>나만의 북마크·캡처 허브</title>
@@ -323,6 +324,7 @@
       </span>
     </div>
     <div class="top-actions">
+      <button class="addbtn ghost" id="installBtn" hidden>📲 앱 설치</button>
       <button class="addbtn cap" id="topCapBtn">📸 캡처 추가</button>
       <button class="addbtn" id="addBtn">＋ 링크·메모</button>
       <div class="counter" id="counter">–</div>
@@ -1857,12 +1859,29 @@ async function deleteResource(r){
 
 /* ---------- PWA 앱 설치 & 휴대폰 [공유하기] 바로 수신 ---------- */
 
-// 기존에 꼬인 서비스워커가 있으면 자동 해제하여 '앱을 열 수 없음' 오류 방지
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(regs => {
-    regs.forEach(r => r.unregister());
-  }).catch(()=>{});
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
 }
+
+let deferredPrompt = null;
+const installBtn = document.getElementById('installBtn');
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (installBtn) installBtn.hidden = false;
+});
+if (installBtn) {
+  installBtn.onclick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    installBtn.hidden = true;
+  };
+}
+window.addEventListener('appinstalled', () => {
+  if (installBtn) installBtn.hidden = true;
+});
 
 document.getElementById('avaHeader').innerHTML = AVA_IMG;
 render(true);
