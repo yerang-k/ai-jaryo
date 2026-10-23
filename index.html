@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="내 자료 허브">
-<link rel="manifest" href="manifest-v2.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>나만의 북마크·캡처 허브</title>
 <style>
@@ -323,7 +323,6 @@
       </span>
     </div>
     <div class="top-actions">
-      <button class="addbtn ghost" id="installBtn" hidden>📲 앱 설치</button>
       <button class="addbtn cap" id="topCapBtn">📸 캡처 추가</button>
       <button class="addbtn" id="addBtn">＋ 링크·메모</button>
       <div class="counter" id="counter">–</div>
@@ -1858,74 +1857,12 @@ async function deleteResource(r){
 
 /* ---------- PWA 앱 설치 & 휴대폰 [공유하기] 바로 수신 ---------- */
 
-// 카카오톡·인스타 등 인앱 브라우저에서 열었을 때 외부 크롬으로 바로 넘겨주는 처리
-(function handleInAppBrowser(){
-  const ua = navigator.userAgent || '';
-  if (/KAKAOTALK|Instagram|NAVER|FBAN|FBAV/i.test(ua) && /Android/i.test(ua)) {
-    const cleanUrl = location.href.replace(/^https?:\/\//i, '');
-    location.href = 'intent://' + cleanUrl + '#Intent;scheme=https;package=com.android.chrome;end';
-  }
-})();
-
+// 기존에 꼬인 서비스워커가 있으면 자동 해제하여 '앱을 열 수 없음' 오류 방지
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => r.unregister());
+  }).catch(()=>{});
 }
-
-let deferredPrompt = null;
-const installBtn = document.getElementById('installBtn');
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  if (installBtn) installBtn.hidden = false;
-});
-if (installBtn) {
-  installBtn.onclick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    installBtn.hidden = true;
-  };
-}
-window.addEventListener('appinstalled', () => {
-  if (installBtn) installBtn.hidden = true;
-});
-
-// 휴대폰에서 캡처 찍고 [공유] -> [내 자료허브] 눌렀을 때 사진·링크 자동 채우기
-(async function checkSharedData(){
-  try {
-    const sp = new URLSearchParams(location.search);
-    if (!sp.get('shared') || !('caches' in window)) return;
-    const cache = await caches.open('ai-jaryo-share-v1');
-    const metaRes = await cache.match('/shared-meta');
-    if (!metaRes) return;
-    const meta = await metaRes.json();
-    await cache.delete('/shared-meta');
-    if (Date.now() - (meta.ts || 0) > 120000) return;
-
-    openAddModal(false);
-    const urlMatch = ((meta.url || '') + ' ' + (meta.text || '')).match(/https?:\/\/[^\s]+/i);
-    if (urlMatch) document.getElementById('fUrl').value = urlMatch[0];
-    if (meta.text) document.getElementById('fMemo').value = meta.text;
-    if (meta.title) document.getElementById('fTitle').value = meta.title;
-
-    if (Array.isArray(meta.files) && meta.files.length) {
-      const loadedFiles = [];
-      for (const fm of meta.files) {
-        const fRes = await cache.match(fm.key);
-        if (fRes) {
-          const blob = await fRes.blob();
-          loadedFiles.push(new File([blob], fm.name || 'capture.jpg', { type: fm.type || 'image/jpeg' }));
-          await cache.delete(fm.key);
-        }
-      }
-      if (loadedFiles.length) {
-        await handleImageFiles(loadedFiles);
-      }
-    }
-    history.replaceState(null, '', location.pathname);
-  } catch(e){}
-})();
 
 document.getElementById('avaHeader').innerHTML = AVA_IMG;
 render(true);
