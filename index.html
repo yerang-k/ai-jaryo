@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="내 자료 허브">
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="manifest-v2.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>나만의 북마크·캡처 허브</title>
 <style>
@@ -1857,6 +1857,16 @@ async function deleteResource(r){
 
 
 /* ---------- PWA 앱 설치 & 휴대폰 [공유하기] 바로 수신 ---------- */
+
+// 카카오톡·인스타 등 인앱 브라우저에서 열었을 때 외부 크롬으로 바로 넘겨주는 처리
+(function handleInAppBrowser(){
+  const ua = navigator.userAgent || '';
+  if (/KAKAOTALK|Instagram|NAVER|FBAN|FBAV/i.test(ua) && /Android/i.test(ua)) {
+    const cleanUrl = location.href.replace(/^https?:\/\//i, '');
+    location.href = 'intent://' + cleanUrl + '#Intent;scheme=https;package=com.android.chrome;end';
+  }
+})();
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
 }

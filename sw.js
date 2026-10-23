@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ai-jaryo-v2';
+const CACHE_NAME = 'ai-jaryo-v3';
 const SHARE_CACHE = 'ai-jaryo-share-v1';
 
 self.addEventListener('install', event => {
@@ -11,7 +11,6 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  // 휴대폰 [공유하기] -> [내 자료허브] 로 사진이나 링크를 보냈을 때 처리
   if (event.request.method === 'POST' && url.pathname.endsWith('/share-target')) {
     event.respondWith((async () => {
       try {
@@ -37,9 +36,9 @@ self.addEventListener('fetch', event => {
           files: fileMeta,
           ts: Date.now()
         }), { headers: { 'Content-Type': 'application/json' } }));
-        return Response.redirect('./index.html?shared=1', 303);
+        return Response.redirect('/ai-jaryo/?shared=1', 303);
       } catch (err) {
-        return Response.redirect('./index.html?add=1', 303);
+        return Response.redirect('/ai-jaryo/?add=1', 303);
       }
     })());
     return;
